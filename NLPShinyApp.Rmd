@@ -1,0 +1,490 @@
+---
+title: "NLPShinyApp"
+author: "KKher"
+date: "9/18/2020"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, error=FALSE, warning=FALSE)
+```
+
+## Data
+
+our data comes from [HC Corpora](http://www.corpora.heliohost.org), and can be downloaded directly from [here](https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip)
+
+First, we will read all our files:
+```{r gettingData}
+US_blogs <- readLines("./final/en_US/en_US.blogs.txt")
+US_news <- readLines("./final/en_US/en_US.news.txt")
+US_twitter <- readLines("./final/en_US/en_US.twitter.txt")
+```
+
+## Objectives
+
+1. A Shiny app that takes as input a phrase (multiple words) in a text box input and outputs a prediction of the next word.
+2. A slide deck consisting of no more than 5 slides created with [R Studio Presenter](https://support.rstudio.com/hc/en-us/articles/200486468-Authoring-R-Presentations) pitching your algorithm and app as if you were presenting to your boss or an investor.
+
+## Data Sampling
+
+Since working on the entire dataset will require high computational power & will consume time, -due to their sizes-, we will work on on samples of our data, exactly 10% of each document size.
+
+```{r dataSamples}
+library(quanteda)
+
+set.seed(18092020)
+# will take samples per country
+sampleUS_blogs <- sample(US_blogs,length(US_blogs) * 0.1, replace = FALSE)
+sampleUS_news <- sample(US_news,length(US_news) * 0.1, replace = FALSE)
+sampleUS_twitter <- sample(US_twitter,length(US_twitter) * 0.1, replace = FALSE)
+
+# combine samples into one ENGLISH sample set
+en_SampledData <- paste(sampleUS_blogs, sampleUS_news, sampleUS_twitter)
+
+# create corpus for the combined and individual samples
+us_corp <- corpus(en_SampledData)
+# blogs_corp <- corpus(sampleUS_blogs);news_corp <- corpus(sampleUS_news);twitter_corp <- corpus(sampleUS_twitter)
+
+# remove unneeded variables
+remove(sampleUS_blogs, sampleUS_news, sampleUS_twitter,en_SampledData,
+       US_blogs, US_news, US_twitter)
+```
+
+## Data Preprocessing
+
+After we've our corpuses set, we need to clean them from any non-alphabetic entries
+
+```{r dataCleaning}
+# the puncuations and numbers in the texts were removed as there is no need to predict punctations or numbers
+us_corp <- tokens(
+    x = tolower(us_corp),
+    remove_punct = TRUE,
+    remove_numbers = TRUE,
+    remove_symbols = TRUE,
+    remove_url = TRUE
+)
+
+# blogs_corp <- tokens(
+#     x = tolower(blogs_corp),
+#     remove_punct = TRUE,
+#     remove_numbers = TRUE,
+#     remove_symbols = TRUE,
+#     remove_url = TRUE
+# )
+# 
+# news_corp <- tokens(
+#     x = tolower(news_corp),
+#     remove_punct = TRUE,
+#     remove_numbers = TRUE,
+#     remove_symbols = TRUE,
+#     remove_url = TRUE
+# )
+# 
+# twitter_corp <- tokens(
+#     x = tolower(twitter_corp),
+#     remove_punct = TRUE,
+#     remove_numbers = TRUE,
+#     remove_symbols = TRUE,
+#     remove_url = TRUE
+# )
+
+```
+
+## Data Tokenization and N-Grams
+
+Generating 2, 3, and 4-grams for combined and individual sets
+
+```{r corpusNGrams}
+us2gram <- tokens_ngrams(us_corp, n = 2)
+us3gram <- tokens_ngrams(us_corp, n = 3)
+us4gram <- tokens_ngrams(us_corp, n = 4)
+# 
+# blogs2gram <- tokens_ngrams(blogs_corp, n = 2)
+# blogs3gram <- tokens_ngrams(blogs_corp, n = 3)
+# 
+# news2gram <- tokens_ngrams(news_corp, n = 2)
+# news3gram <- tokens_ngrams(news_corp, n = 3)
+# 
+# twitter2gram <- tokens_ngrams(twitter_corp, n = 2)
+# twitter3gram <- tokens_ngrams(twitter_corp, n = 3)
+
+```
+
+Create Document Frequency Matrices and trim them to speedup the process
+
+```{r dataDFM}
+# All data DFMs
+us_uni_DFM <- dfm(us_corp) ; us_uni_DFM <- dfm_trim(us_uni_DFM, 10)
+us_bi_DFM <- dfm(us2gram) ; us_bi_DFM <- dfm_trim(us_bi_DFM, 10)
+us_tri_DFM <- dfm(us3gram) ; us_tri_DFM <- dfm_trim(us_tri_DFM, 10)
+us_quad_DFM <- dfm(us4gram) ; us_quad_DFM <- dfm_trim(us_quad_DFM, 10)
+
+# # News data DFMs
+# news_uni_DFM <- dfm(news_corp) ; news_uni_DFM <- dfm_trim(news_uni_DFM, 3)
+# news_bi_DFM <- dfm(news2gram) ; news_bi_DFM <- dfm_trim(news_bi_DFM, 3)
+# news_tri_DFM <- dfm(news3gram) ; news_tri_DFM <- dfm_trim(news_tri_DFM, 3)
+# 
+# # Blogs data DFMs
+# blogs_uni_DFM <- dfm(blogs_corp) ; blogs_uni_DFM <- dfm_trim(blogs_uni_DFM, 3)
+# blogs_bi_DFM <- dfm(blogs2gram) ; blogs_bi_DFM <- dfm_trim(blogs_bi_DFM, 3)
+# blogs_tri_DFM <- dfm(blogs3gram) ; blogs_tri_DFM <- dfm_trim(blogs_tri_DFM, 3)
+# 
+# # Twitter data DFMs
+# twitt_uni_DFM <- dfm(twitter_corp) ; twitt_uni_DFM <- dfm_trim(twitt_uni_DFM, 3)
+# twitt_bi_DFM <- dfm(twitter2gram) ; twitt_bi_DFM <- dfm_trim(twitt_bi_DFM, 3)
+# twitt_tri_DFM <- dfm(twitter3gram) ; twitt_tri_DFM <- dfm_trim(twitt_tri_DFM, 3)
+
+# remove unneeded variables
+remove(us_corp, us2gram, us3gram,us4gram)
+
+# remove(us_corp, us2gram, us3gram,news_corp,news2gram,news3gram,blogs_corp,blogs2gram,blogs3gram,
+#        twitter_corp, twitter2gram, twitter3gram)
+```
+
+Convert DFMs into tables with words and their respective counts
+
+```{r wordFrequency_us}
+library(data.table)
+
+us_uni_sum <- colSums(us_uni_DFM)
+us_bi_sum <- colSums(us_bi_DFM)
+us_tri_sum <- colSums(us_tri_DFM)
+us_quad_sum <- colSums(us_quad_DFM)
+
+# Create data tables with individual words as columns
+us_uni_words <- data.table(word_1 = names(us_uni_sum), count = us_uni_sum)
+
+us_bi_words <- data.table(
+        word_1 = sapply(strsplit(names(us_bi_sum), "_", fixed = TRUE), '[[', 1),
+        word_2 = sapply(strsplit(names(us_bi_sum), "_", fixed = TRUE), '[[', 2),
+        count = us_bi_sum)
+
+us_tri_words <- data.table(
+        word_1 = sapply(strsplit(names(us_tri_sum), "_", fixed = TRUE), '[[', 1),
+        word_2 = sapply(strsplit(names(us_tri_sum), "_", fixed = TRUE), '[[', 2),
+        word_3 = sapply(strsplit(names(us_tri_sum), "_", fixed = TRUE), '[[', 3),
+        count = us_tri_sum)
+
+us_quad_words <- data.table(
+        word_1 = sapply(strsplit(names(us_quad_sum), "_", fixed = TRUE), '[[', 1),
+        word_2 = sapply(strsplit(names(us_quad_sum), "_", fixed = TRUE), '[[', 2),
+        word_3 = sapply(strsplit(names(us_quad_sum), "_", fixed = TRUE), '[[', 3),
+        word_4 = sapply(strsplit(names(us_quad_sum), "_", fixed = TRUE), '[[', 4),
+        count = us_tri_sum)
+
+```
+
+```{r wordFrequency_blogs}
+# blogs_uni_sum <- colSums(blogs_uni_DFM)
+# blogs_bi_sum <- colSums(blogs_bi_DFM)
+# blogs_tri_sum <- colSums(blogs_tri_DFM)
+# blogs_quad_sum <- colSums(blogs_quad_DFM)
+# 
+# # Create data tables with individual words as columns
+# blogs_uni_words <- data.table(word_1 = names(blogs_uni_sum), count = blogs_uni_sum)
+# 
+# blogs_bi_words <- data.table(
+#         word_1 = sapply(strsplit(names(blogs_bi_sum), "_", fixed = TRUE), '[[', 1),
+#         word_2 = sapply(strsplit(names(blogs_bi_sum), "_", fixed = TRUE), '[[', 2),
+#         count = blogs_bi_sum)
+# 
+# blogs_tri_words <- data.table(
+#         word_1 = sapply(strsplit(names(blogs_tri_sum), "_", fixed = TRUE), '[[', 1),
+#         word_2 = sapply(strsplit(names(blogs_tri_sum), "_", fixed = TRUE), '[[', 2),
+#         word_3 = sapply(strsplit(names(blogs_tri_sum), "_", fixed = TRUE), '[[', 3),
+#         count = blogs_tri_sum)
+# 
+
+```
+
+```{r wordFrequency_news}
+# news_uni_sum <- colSums(news_uni_DFM)
+# news_bi_sum <- colSums(news_bi_DFM)
+# news_tri_sum <- colSums(news_tri_DFM)
+# 
+# # Create data tables with individual words as columns
+# news_uni_words <- data.table(word_1 = names(news_uni_sum), count = news_uni_sum)
+# 
+# news_bi_words <- data.table(
+#         word_1 = sapply(strsplit(names(news_bi_sum), "_", fixed = TRUE), '[[', 1),
+#         word_2 = sapply(strsplit(names(news_bi_sum), "_", fixed = TRUE), '[[', 2),
+#         count = news_bi_sum)
+# 
+# news_tri_words <- data.table(
+#         word_1 = sapply(strsplit(names(news_tri_sum), "_", fixed = TRUE), '[[', 1),
+#         word_2 = sapply(strsplit(names(news_tri_sum), "_", fixed = TRUE), '[[', 2),
+#         word_3 = sapply(strsplit(names(news_tri_sum), "_", fixed = TRUE), '[[', 3),
+#         count = news_tri_sum)
+
+
+```
+
+```{r wordFrequency_twitter}
+# twitt_uni_sum <- colSums(twitt_uni_DFM)
+# twitt_bi_sum <- colSums(twitt_bi_DFM)
+# twitt_tri_sum <- colSums(twitt_tri_DFM)
+# 
+# # Create data tables with individual words as columns
+# twitt_uni_words <- data.table(word_1 = names(twitt_uni_sum), count = twitt_uni_sum)
+# 
+# twitt_bi_words <- data.table(
+#         word_1 = sapply(strsplit(names(twitt_bi_sum), "_", fixed = TRUE), '[[', 1),
+#         word_2 = sapply(strsplit(names(twitt_bi_sum), "_", fixed = TRUE), '[[', 2),
+#         count = twitt_bi_sum)
+# 
+# twitt_tri_words <- data.table(
+#         word_1 = sapply(strsplit(names(twitt_tri_sum), "_", fixed = TRUE), '[[', 1),
+#         word_2 = sapply(strsplit(names(twitt_tri_sum), "_", fixed = TRUE), '[[', 2),
+#         word_3 = sapply(strsplit(names(twitt_tri_sum), "_", fixed = TRUE), '[[', 3),
+#         count = twitt_tri_sum)
+
+
+```
+
+## Data Modelling
+Let’s add Kneser-Kney smoothing to the dataset. First we will find bi-gram probabilities and then add smoothing.
+
+```{r dataModelling_bi}
+# remove unneeded variables
+remove(us_uni_sum,us_bi_sum, us_tri_sum, us_quad_sum, us_uni_DFM,us_bi_DFM,us_tri_DFM,us_quad_DFM)
+
+discount_value <- 0.75
+
+######## Finding Bi-Gram Probability for Combined Data #################
+
+# Finding number of bi-gram words
+numOfBiGrams <- nrow(us_bi_words[by = .(word_1, word_2)])
+
+# Dividing number of times word 2 occurs as second part of bigram, by total number of bigrams.  
+# ( Finding probability for a word given the number of times it was second word of a bigram)
+ckn <- us_bi_words[, .(Prob = ((.N) / numOfBiGrams)), by = word_2]
+setkey(ckn, word_2)
+
+# Assigning the probabilities as second word of bigram, to unigrams
+us_uni_words[, Prob := ckn[word_1, Prob]]
+us_uni_words <- us_uni_words[!is.na(us_uni_words$Prob)]
+
+# Finding number of times word 1 occurred as word 1 of bi-grams
+n1wi <- us_bi_words[, .(count = .N), by = word_1]
+setkey(n1wi, word_1)
+setkey(us_uni_words, word_1)
+
+# Assigning total times word 1 occured to bigram cn1
+us_bi_words[, Cn1 := n1wi[word_1, count]]
+
+# Kneser Kney Algorithm
+us_bi_words[, Prob := ((count - discount_value) / Cn1 + discount_value / Cn1 * n1wi[word_1, count] * us_uni_words[word_2, Prob])]
+
+######## End of Finding Bi-Gram Probability for Combined Data #################
+
+######## Finding Bi-Gram Probability for News Data #################
+
+# # Finding number of bi-gram words
+# numOfBiGrams <- nrow(news_bi_words[by = .(word_1, word_2)])
+# 
+# # Dividing number of times word 2 occurs as second part of bigram, by total number of bigrams.  
+# # ( Finding probability for a word given the number of times it was second word of a bigram)
+# ckn <- news_bi_words[, .(Prob = ((.N) / numOfBiGrams)), by = word_2]
+# setkey(ckn, word_2)
+# 
+# # Assigning the probabilities as second word of bigram, to unigrams
+# news_uni_words[, Prob := ckn[word_1, Prob]]
+# news_uni_words <- news_uni_words[!is.na(news_uni_words$Prob)]
+# 
+# # Finding number of times word 1 occurred as word 1 of bi-grams
+# n1wi <- news_bi_words[, .(count = .N), by = word_1]
+# setkey(n1wi, word_1)
+# setkey(news_uni_words, word_1)
+# 
+# # Assigning total times word 1 occured to bigram cn1
+# news_bi_words[, Cn1 := n1wi[word_1, count]]
+# 
+# # Kneser Kney Algorithm
+# news_bi_words[, Prob := ((count - discount_value) / Cn1 + discount_value / Cn1 * n1wi[word_1, count] * news_uni_words[word_2, Prob])]
+
+######## End of Finding Bi-Gram Probability for News Data #################
+
+######## Finding Bi-Gram Probability for Blogs Data #################
+
+# Finding number of bi-gram words
+# numOfBiGrams <- nrow(blogs_bi_words[by = .(word_1, word_2)])
+# 
+# # Dividing number of times word 2 occurs as second part of bigram, by total number of bigrams.  
+# # ( Finding probability for a word given the number of times it was second word of a bigram)
+# ckn <- blogs_bi_words[, .(Prob = ((.N) / numOfBiGrams)), by = word_2]
+# setkey(ckn, word_2)
+# 
+# # Assigning the probabilities as second word of bigram, to unigrams
+# blogs_uni_words[, Prob := ckn[word_1, Prob]]
+# blogs_uni_words <- blogs_uni_words[!is.na(blogs_uni_words$Prob)]
+# 
+# # Finding number of times word 1 occurred as word 1 of bi-grams
+# n1wi <- blogs_bi_words[, .(count = .N), by = word_1]
+# setkey(n1wi, word_1)
+# setkey(blogs_uni_words, word_1)
+# 
+# # Assigning total times word 1 occured to bigram cn1
+# blogs_bi_words[, Cn1 := n1wi[word_1, count]]
+# 
+# # Kneser Kney Algorithm
+# blogs_bi_words[, Prob := ((count - discount_value) / Cn1 + discount_value / Cn1 * n1wi[word_1, count] * blogs_uni_words[word_2, Prob])]
+
+######## End of Finding Bi-Gram Probability for Blogs Data #################
+
+
+######## Finding Bi-Gram Probability for Twitter Data #################
+
+# Finding number of bi-gram words
+# numOfBiGrams <- nrow(twitt_bi_words[by = .(word_1, word_2)])
+# 
+# # Dividing number of times word 2 occurs as second part of bigram, by total number of bigrams.  
+# # ( Finding probability for a word given the number of times it was second word of a bigram)
+# ckn <- twitt_bi_words[, .(Prob = ((.N) / numOfBiGrams)), by = word_2]
+# setkey(ckn, word_2)
+# 
+# # Assigning the probabilities as second word of bigram, to unigrams
+# twitt_uni_words[, Prob := ckn[word_1, Prob]]
+# twitt_uni_words <- twitt_uni_words[!is.na(twitt_uni_words$Prob)]
+# 
+# # Finding number of times word 1 occurred as word 1 of bi-grams
+# n1wi <- twitt_bi_words[, .(count = .N), by = word_1]
+# setkey(n1wi, word_1)
+# setkey(twitt_uni_words, word_1)
+# 
+# # Assigning total times word 1 occured to bigram cn1
+# twitt_bi_words[, Cn1 := n1wi[word_1, count]]
+# 
+# # Kneser Kney Algorithm
+# twitt_bi_words[, Prob := ((count - discount_value) / Cn1 + discount_value / Cn1 * n1wi[word_1, count] * twitt_uni_words[word_2, Prob])]
+
+######## End of Finding Bi-Gram Probability for Twitter Data #################
+```
+
+Then let’s find tri-gram probabilities and add smoothing.
+
+```{r dataModelling_tri}
+######## Finding Tri-Gram Probability for Combined Data #################
+
+# Finding count of word1-word2 combination in bigram 
+setDT(us_tri_words)[us_bi_words, Cn2 := count, on = .(word_1 = word_1, word_2 = word_2)]
+setDT(us_tri_words)[us_bi_words, Prob := Prob, on = .(word_1 = word_1, word_2 = word_2)]
+
+#us_tri_words[, Cn2 := us_bi_words[.(word_1, word_2), count]]
+
+# Finding count of word1-word2 combination in trigram
+n1w12 <- us_tri_words[, .N, by = .(word_1, word_2)]
+setkey(n1w12, word_1, word_2)
+
+setDT(us_tri_words)[n1w12, N := N, on = .(word_1 = word_1, word_2 = word_2)]
+
+# Kneser Kney Algorithm
+us_tri_words[, Prob := (count - discount_value) / Cn2 + discount_value / Cn2 * N* Prob]
+
+######## End of Finding Tri-Gram Probability for Combined Data #################
+
+###################################################################################################
+######## Finding Tri-Gram Probability for News Data #################
+
+# Finding count of word1-word2 combination in bigram 
+# setDT(news_tri_words)[news_bi_words, Cn2 := count, on = .(word_1 = word_1, word_2 = word_2)]
+# setDT(news_tri_words)[news_bi_words, Prob := Prob, on = .(word_1 = word_1, word_2 = word_2)]
+# 
+# #us_tri_words[, Cn2 := us_bi_words[.(word_1, word_2), count]]
+# 
+# # Finding count of word1-word2 combination in trigram
+# n1w12 <- news_tri_words[, .N, by = .(word_1, word_2)]
+# setkey(news_bi_words, word_1, word_2)
+# 
+# setDT(news_tri_words)[n1w12, N := N, on = .(word_1 = word_1, word_2 = word_2)]
+# 
+# # Kneser Kney Algorithm
+# news_tri_words[, Prob := (count - discount_value) / Cn2 + discount_value / Cn2 * N * Prob]
+
+######## End of Finding Tri-Gram Probability for News Data #################
+
+###################################################################################################
+######## Finding Tri-Gram Probability for Blogs Data #################
+
+# Finding count of word1-word2 combination in bigram 
+# setDT(blogs_tri_words)[blogs_bi_words, Cn2 := count, on = .(word_1 = word_1, word_2 = word_2)]
+# setDT(blogs_tri_words)[blogs_bi_words, Prob := Prob, on = .(word_1 = word_1, word_2 = word_2)]
+# 
+# #us_tri_words[, Cn2 := us_bi_words[.(word_1, word_2), count]]
+# 
+# # Finding count of word1-word2 combination in trigram
+# n1w12 <- blogs_tri_words[, .N, by = .(word_1, word_2)]
+# setkey(n1w12, word_1, word_2)
+# 
+# setDT(blogs_tri_words)[n1w12, N := N, on = .(word_1 = word_1, word_2 = word_2)]
+# 
+# # Kneser Kney Algorithm
+# blogs_tri_words[, Prob := (count - discount_value) / Cn2 + discount_value / Cn2 * N * Prob]
+
+######## End of Finding Tri-Gram Probability for Blogs Data #################
+
+###################################################################################################
+######## Finding Tri-Gram Probability for Twitter Data #################
+
+# Finding count of word1-word2 combination in bigram 
+# setDT(twitt_tri_words)[twitt_bi_words, Cn2 := count, on = .(word_1 = word_1, word_2 = word_2)]
+# setDT(twitt_tri_words)[twitt_bi_words, Prob := Prob, on = .(word_1 = word_1, word_2 = word_2)]
+# 
+# #us_tri_words[, Cn2 := us_bi_words[.(word_1, word_2), count]]
+# 
+# # Finding count of word1-word2 combination in trigram
+# n1w12 <- twitt_tri_words[, .N, by = .(word_1, word_2)]
+# setkey(n1w12, word_1, word_2)
+# 
+# setDT(twitt_tri_words)[n1w12, N := N, on = .(word_1 = word_1, word_2 = word_2)]
+# 
+# # Kneser Kney Algorithm
+# twitt_tri_words[, Prob := (count - discount_value) / Cn2 + discount_value / Cn2 * N * Prob]
+
+######## End of Finding Tri-Gram Probability for Twitter Data #################
+
+
+```
+
+```{r dataModelling_quad}
+######## Finding Tri-Gram Probability for Combined Data #################
+
+# Finding count of word1-word2 combination in bigram 
+setDT(us_quad_words)[us_tri_words, Cn2 := count, on = .(word_1 = word_1, word_2 = word_2, word_3 = word_3)]
+setDT(us_quad_words)[us_tri_words, Prob := Prob, on = .(word_1 = word_1, word_2 = word_2, word_3 = word_3)]
+
+#us_tri_words[, Cn2 := us_bi_words[.(word_1, word_2), count]]
+
+# Finding count of word1-word2 combination in trigram
+n1w12 <- us_quad_words[, .N, by = .(word_1, word_2, word_3)]
+setkey(n1w12, word_1, word_2, word_3)
+
+setDT(us_quad_words)[n1w12, N := N, on = .(word_1 = word_1, word_2 = word_2, word_3 = word_3)]
+
+# Kneser Kney Algorithm
+us_quad_words[, Prob := (count - discount_value) / Cn2 + discount_value / Cn2 * N* Prob]
+
+######## End of Finding Tri-Gram Probability for Combined Data #################
+
+```
+
+## Saving results
+
+We now save 1,2,3, 4-grams outputs, to furtherly utilize them in our ShinyApp
+```{r dataSaving}
+saveRDS(us_uni_words, "./NLPData/us_uni_words.RData")
+saveRDS(us_bi_words, "./NLPData/us_bi_words.RData")
+saveRDS(us_tri_words, "./NLPData/us_tri_words.RData")
+saveRDS(us_quad_words, "./NLPData/us_quad_words.RData")
+
+# saveRDS(news_uni_words, "./NLPData/news_uni_words.RData")
+# saveRDS(news_bi_words, "./NLPData/news_bi_words.RData")
+# saveRDS(news_tri_words, "./NLPData/news_tri_words.RData")
+# 
+# saveRDS(blogs_uni_words, "./NLPData/blogs_uni_words.RData")
+# saveRDS(blogs_bi_words, "./NLPData/blogs_bi_words.RData")
+# saveRDS(blogs_tri_words, "./NLPData/blogs_tri_words.RData")
+# 
+# saveRDS(twitt_uni_words, "./NLPData/twitt_uni_words.RData")
+# saveRDS(twitt_bi_words, "./NLPData/twitt_bi_words.RData")
+# saveRDS(twitt_tri_words, "./NLPData/twitt_tri_words.RData")
+
+```
